@@ -1,0 +1,56 @@
+---
+- name: Windows PowerSTIG 
+  hosts: all
+  vars:
+    ansible_connection: winrm
+    ansible_winrm_transport: basic
+  gather_facts: no
+  become: yes
+  become_method: runas
+  become_user: Administrator
+  tasks:
+
+  - name: Install PowerSTIG Modules
+    win_psmodule:
+      name: "{{ item }}"
+      state: present
+    loop:
+      - NuGet
+      - PowerShellGet
+      - PowerStig
+    tags:
+      - psmodules
+
+  - name: Install PowerSTIG prerequisites with specific versions
+    win_shell: |
+      (Get-Module PowerStig -ListAvailable).RequiredModules | % {$PSItem | Install-Module -Force}
+    tags:
+      - psmodules
+
+  - name: PowerSTIG prereqs not necessarily covered in previous task
+    win_psmodule:
+      name: "{{ item.name }}"
+      required_version: "{{ item.version }}"
+      state: present
+      allow_clobber: yes
+    loop:
+      - name: AuditPolicyDsc
+        version: 1.2.0.0
+      - name: SecurityPolicyDsc
+        version: 2.4.0.0
+      - name: PSDscResources
+        version: 2.10.0.0
+    tags:
+      - psmodules
+
+  - name: Generate PowerSTIG DSC MOF
+    win_shell: |
+      {{ lookup('template', 'templates/win_stig_dsc.ps.j2') }} 
+    tags:
+      - dsc
+
+  - name: Apply generated PowerSTIG MOF
+    win_shell: |
+      Start-DscConfiguration -Path C:\Windows\Example -Force -Wait -Verbose
+    tags:
+      - dsc 
