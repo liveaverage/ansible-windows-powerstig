@@ -1,10 +1,10 @@
 <#
     Use the embedded STIG data with default range values to apply the most recent STIG settings.
-    In this example, the composite resource gets the highest 2012 R2 member server STIG version
+    In this example, the composite resource gets the highest 2016 member server STIG version
     file it can find locally and applies it to the server. The composite resource merges in the
     default values for any settings that have a valid range.
 #>
-configuration Example
+configuration STIGme
 {
     param
     (
@@ -21,11 +21,12 @@ configuration Example
         {
             OsVersion   = '2016'
             OsRole      = 'MS'
-            StigVersion = '1.9'
+            StigVersion = '1.12'
             DomainName  = 'sample.test'
             ForestName  = 'sample.test'
+            SkipRule    = @('V-1075','V-73593')
         }
     }
 }
 
-Example
+STIGme
