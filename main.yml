@@ -1,29 +1,48 @@
 ---
+
+- name: Wait for provisioned nodes
+  hosts: all
+  gather_facts: false
+  vars:
+    ansible_connection: winrm
+    ansible_winrm_transport: basic
+  become: yes
+  become_method: runas
+  become_user: Administrator
+  tasks:
+    - name: Wait for system to become reachable over WinRM
+      wait_for_connection:
+        timeout: 900
+
+    - name: Gather facts
+      setup:
+
 - name: Windows PowerSTIG 
   hosts: all
   vars:
     ansible_connection: winrm
     ansible_winrm_transport: basic
+    security_profile: PowerSTIG
+    security_override: "false"
   gather_facts: no
   become: yes
   become_method: runas
   become_user: Administrator
   tasks:
 
+  - fail:
+      msg: "Security Profile set to: {{ security_profile }} -- Exception Required"
+    when: (not security_profile or security_profile == "None") and (security_override != "true")
+
   - name: Install PowerSTIG Modules
     win_psmodule:
       name: "{{ item }}"
       state: present
     loop:
+      - DSCEA
       - NuGet
       - PowerShellGet
       - PowerStig
-    tags:
-      - psmodules
-
-  - name: Install PowerSTIG prerequisites with specific versions
-    win_shell: |
-      (Get-Module PowerStig -ListAvailable).RequiredModules | % {$PSItem | Install-Module -Force}
     tags:
       - psmodules
 
@@ -49,8 +68,36 @@
     tags:
       - dsc
 
+  - name: Audit Servers
+    win_shell: |
+      New-Item -Path C:\Dev\DSCEA -ItemType directory
+      Start-DSCEAscan -MofFile C:\Windows\STIGme\localhost.mof -ComputerName localhost -OutputPath C:\Dev\DSCEA
+    tags:
+      - dsc
+
   - name: Apply generated PowerSTIG MOF
     win_shell: |
-      Start-DscConfiguration -Path C:\Windows\Example -Force -Wait -Verbose
+      Start-DscConfiguration -Path C:\Windows\STIGme -Force -Wait -Verbose
     tags:
       - dsc 
+
+  - name: Generate checklist from DSC results
+    ignore_errors: true
+    win_shell: |
+      Import-module PowerStig
+      $DscResults = Test-DsCconfiguration -ComputerName localhost -Detailed
+      $XccdfPath  = "$((get-module PowerStig).ModuleBase)\StigData\Archive\Windows.Server.2016\U_MS_Windows_Server_2016_STIG_V1R12_Manual-xccdf.xml"
+                     
+      $outputPath = "C:\Dev\checklist.xml"
+      New-StigCheckList -DscResult $DscResults -XccdfPath $XccdfPath -OutputPath $outputPath
+    tags:
+      - audit
+
+  - name: Grab checklist file
+    fetch:
+      src: 'C:\Dev\checklist.xml'
+      dest: '/tmp/stig'
+      fail_on_missing: no
+      validate_checksum: no
+    tags:
+      - audit
