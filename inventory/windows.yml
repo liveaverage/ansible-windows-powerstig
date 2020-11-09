@@ -1,0 +1,11 @@
+all:
+  children:
+    gxr_win:
+      hosts:
+        test.domain.com
+      vars:
+        ansible_user: "Administrator"                   # Or specify via -u
+        ansible_password: "{{ vault_password }}"        # Or specify via -k
+        ansible_become_password: "{{ vault_password }}" # Or specify via -K
+        ansible_connection: winrm
+        ansible_winrm_transport: basic
